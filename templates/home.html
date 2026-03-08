@@ -79,7 +79,10 @@
     <h2 class="mb-4">Real-Time Recognition</h2>
 
     <div class="video-container">
-      <img src="{{url_for('video')}}" alt="Video Feed" />
+      <img id="processed-feed" src="{{ url_for('static', filename='Files/Resources/background.png') }}"
+        alt="Video Feed" />
+      <video id="webcam" autoplay playsinline style="display: none;"></video>
+      <canvas id="canvas" style="display: none;"></canvas>
     </div>
 
     <div class="mt-4">
@@ -89,6 +92,57 @@
   </div>
 
   <script src="/static/styles/assets/bootstrap/js/bootstrap.bundle.min.js"></script>
+
+  <script>
+    const video = document.getElementById('webcam');
+    const canvas = document.getElementById('canvas');
+    const processedFeed = document.getElementById('processed-feed');
+    const ctx = canvas.getContext('2d');
+
+    // Request camera access
+    navigator.mediaDevices.getUserMedia({ video: true })
+      .then(stream => {
+        video.srcObject = stream;
+        video.play();
+        video.onloadedmetadata = () => {
+          canvas.width = video.videoWidth;
+          canvas.height = video.videoHeight;
+          sendFrame();
+        };
+      })
+      .catch(err => {
+        console.error("Error accessing webcam:", err);
+        alert("Could not access webcam. Please ensure permissions are granted.");
+      });
+
+    function sendFrame() {
+      // Draw video frame to canvas
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      // Convert to base64
+      const dataURL = canvas.toDataURL('image/jpeg', 0.8);
+
+      fetch('/process_frame', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ image: dataURL })
+      })
+        .then(response => response.json())
+        .then(data => {
+          if (data.image) {
+            processedFeed.src = data.image;
+          }
+          // Throttle slightly to prevent flooding backend (150ms ~= 6-7 fps)
+          setTimeout(sendFrame, 150);
+        })
+        .catch(err => {
+          console.error("Error processing frame:", err);
+          // On error, wait longer before retrying
+          setTimeout(sendFrame, 1000);
+        });
+    }
+  </script>
 </body>
 
 </html>
